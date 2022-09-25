@@ -121,10 +121,9 @@ encode_salt(char *salt, u_int8_t *csalt, char minor, u_int16_t clen, u_int8_t lo
 }
 
 
-// Generates a salt for this version of crypt.
-// Since versions may change. Keeping this here
-// seems sensible.
-// from: http://mail-index.netbsd.org/tech-crypto/2002/05/24/msg000204.html
+// Generates a salt for this version of crypt. Since versions may change.
+// Keeping this here seems sensible. From:
+// http://mail-index.netbsd.org/tech-crypto/2002/05/24/msg000204.html.
 void
 bcrypt_gensalt(char minor, u_int8_t log_rounds, u_int8_t *seed, char *gsalt)
 {
