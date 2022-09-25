@@ -30,11 +30,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _NODE_BLF_H_
-#define _NODE_BLF_H_
+#pragma once
 
 #include <sys/types.h>
+
+namespace bcrypt {
 
 /* Solaris compatibility */
 #ifdef __sun
@@ -70,10 +70,13 @@ typedef unsigned int u_int32_t;
 typedef unsigned long long u_int64_t;
 #endif
 
-#define BCRYPT_VERSION '2'
-#define BCRYPT_MAXSALT 16	/* Precomputation is just so nice */
-#define BCRYPT_BLOCKS 6		/* Ciphertext blocks */
-#define BCRYPT_MINROUNDS 16	/* we have log2(rounds) in salt */
+constexpr char BCRYPT_VERSION = '2';
+// Precomputation is just so nice
+constexpr u_int8_t BCRYPT_MAXSALT = 16;
+// Ciphertext blocks
+constexpr u_int8_t BCRYPT_BLOCKS = 6;
+// we have log2(rounds) in salt
+constexpr u_int8_t BCRYPT_MINROUNDS = 16;
 
 /* Schneier specifies a maximum key length of 56 bytes.
  * This ensures that every key bit affects every cipher
@@ -82,12 +85,16 @@ typedef unsigned long long u_int64_t;
  * of the key affect all cipherbits.
  */
 
-#define BLF_N	16			/* Number of Subkeys */
-#define BLF_MAXKEYLEN ((BLF_N-2)*4)	/* 448 bits */
-#define BLF_MAXUTILIZED ((BLF_N+2)*4)	/* 576 bits */
-
-#define _PASSWORD_LEN   128             /* max length, not counting NUL */
-#define _SALT_LEN       32              /* max length */
+// Number of Subkeys
+constexpr u_int8_t BLF_N = 16;
+// 448 bits
+constexpr u_int8_t BLF_MAXKEYLEN = (BLF_N-2)*4;
+// 576 bits
+constexpr u_int8_t BLF_MAXUTILIZED = (BLF_N+2)*4;
+// max length, not counting NUL
+constexpr u_int8_t _PASSWORD_LEN = 128;
+// max length
+constexpr u_int8_t _SALT_LEN = 32;
 
 /* Blowfish context */
 typedef struct BlowfishContext {
@@ -129,4 +136,4 @@ void bcrypt(const char *, size_t key_len, const char *, char *);
 void encode_salt(char *, u_int8_t *, char, u_int16_t, u_int8_t);
 u_int32_t bcrypt_get_rounds(const char *);
 
-#endif
+} // namespace bcrypt
