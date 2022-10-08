@@ -106,6 +106,35 @@ decode_base64(u_int8_t *buffer, u_int16_t len, u_int8_t *data)
   }
 }
 
+static void
+encode_base64(u_int8_t *buffer, u_int8_t *data, u_int16_t len)
+{
+  u_int8_t *bp = buffer;
+  u_int8_t *p = data;
+  while (p < data + len) {
+    u_int8_t c1 = *p++;
+    *bp++ = Base64Code[(c1 >> 2)];
+    c1 = (c1 & 0x03) << 4;
+    if (p >= data + len) {
+      *bp++ = Base64Code[c1];
+      break;
+    }
+    u_int8_t c2 = *p++;
+    c1 |= (c2 >> 4) & 0x0f;
+    *bp++ = Base64Code[c1];
+    c1 = (c2 & 0x0f) << 2;
+    if (p >= data + len) {
+      *bp++ = Base64Code[c1];
+      break;
+    }
+    c2 = *p++;
+    c1 |= (c2 >> 6) & 0x03;
+    *bp++ = Base64Code[c1];
+    *bp++ = Base64Code[c2 & 0x3f];
+  }
+  *bp = '\0';
+}
+
 void
 encode_salt(char *salt, u_int8_t *csalt, char minor, u_int16_t clen, u_int8_t logr)
 {
@@ -258,48 +287,6 @@ bcrypt(const char *key, size_t key_len, const char *salt, char *encrypted)
   memset(ciphertext, 0, sizeof(ciphertext));
   memset(csalt, 0, sizeof(csalt));
   memset(cdata, 0, sizeof(cdata));
-}
-
-u_int32_t bcrypt_get_rounds(const char * hash)
-{
-  /* skip past the leading "$" */
-  if (!hash || *(hash++) != '$') return 0;
-
-  /* skip past version */
-  if (0 == (*hash++)) return 0;
-  if (*hash && *hash != '$') hash++;
-  if (*hash++ != '$') return 0;
-
-  return atoi(hash);
-}
-
-static void
-encode_base64(u_int8_t *buffer, u_int8_t *data, u_int16_t len)
-{
-  u_int8_t *bp = buffer;
-  u_int8_t *p = data;
-  while (p < data + len) {
-    u_int8_t c1 = *p++;
-    *bp++ = Base64Code[(c1 >> 2)];
-    c1 = (c1 & 0x03) << 4;
-    if (p >= data + len) {
-      *bp++ = Base64Code[c1];
-      break;
-    }
-    u_int8_t c2 = *p++;
-    c1 |= (c2 >> 4) & 0x0f;
-    *bp++ = Base64Code[c1];
-    c1 = (c2 & 0x0f) << 2;
-    if (p >= data + len) {
-      *bp++ = Base64Code[c1];
-      break;
-    }
-    c2 = *p++;
-    c1 |= (c2 >> 6) & 0x03;
-    *bp++ = Base64Code[c1];
-    *bp++ = Base64Code[c2 & 0x3f];
-  }
-  *bp = '\0';
 }
 
 } // namespace bcrypt

@@ -307,7 +307,6 @@ Blowfish_expand0state(blf_ctx *c, const u_int8_t *key, u_int16_t keybytes)
     c->P[i] = c->P[i] ^ temp;
   }
 
-  j = 0;
   u_int32_t datal = 0x00000000;
   u_int32_t datar = 0x00000000;
   for (u_int16_t i = 0; i < BLF_N + 2; i += 2) {
