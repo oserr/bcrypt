@@ -34,7 +34,7 @@ struct BcryptParams {
 // Returns the parameters if they are decoded correctly.
 // $--$--$-----------------------------------------------------
 // 012345678901234567890123456789012345678901234567890123456789
-//        |                     |   
+//        |                     |
 //        Salt begins here      Password hash begins here
 std::optional<BCryptParams>
 DecodeBcrypt(const BcrytpArr& arr) {
