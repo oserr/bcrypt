@@ -13,6 +13,9 @@
 namespace bcrypt {
 namespace {
 
+// Ciphertext blocks.
+constexpr std::uint8_t kBcryptBlocks = 6;
+
 // The maximum size of the password that can be used by the algorithm.
 constexpr std::uint32_t kMaxPwdSize = 72;
 
@@ -28,7 +31,7 @@ constexpr std::uint32_t kEncodedSaltSize = 22;
 struct BcryptParams {
   PwdHash pwd_hash;
   Salt salt;
-  std::uint32_t rounds;
+  std::uint32_t rounds = 0;
 }
 
 // Returns the parameters if they are decoded correctly.
@@ -60,15 +63,15 @@ DecodeBcrypt(const BcrytpArr& arr) {
 BcryptArr
 EncodeBcrypt(const PwdHash& hsh, const Salt& salt, std::uint32_t rounds)
 {
-  char b64_hsh[kEncodedHashSize+1];
-  ToBase64(hsh.data(), hsh.size(), b64_hsh);
+  char b64_hash[kEncodedHashSize+1];
+  ToBase64(hsh.data(), hsh.size(), b64_hash);
 
   char b64_salt[kEncodedSaltSize+1];
-  ToBase64(salt.data(), salt.size(), b64_hsh);
+  ToBase64(salt.data(), salt.size(), b64_salt);
 
   BcryptArr bcrypt_arr;
   std::format_to_n(bcrypt_arr.begin(), bcrypt_arr.size(),
-      "$2b${:>0}${}{}", rounds, b64_salt, b64_hsh);
+      "$2b${:>0}${}{}", rounds, b64_salt, b64_hash);
 
   return bcrypt_arr;
 }
@@ -77,10 +80,11 @@ EncodeBcrypt(const PwdHash& hsh, const Salt& salt, std::uint32_t rounds)
 PwdHash
 GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
 {
+  // Cap number of password bytes to 72.
   if (pwd.size() > kMaxPwdSize)
     pwd.remove_suffix(pwd.size()-kMaxPwdSize);
 
-  /* Setting up S-Boxes and Subkeys */
+  // Setting up S-Boxes and Subkeys
   blf_ctx state;
   Blowfish_initstate(&state);
   Blowfish_expandstate(&state, salt.data(), salt.size(), pwd.data(), pwd.size());
@@ -89,34 +93,33 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
     Blowfish_expand0state(&state, salt.data(), salt.size());
   }
 
-  /* This can be precomputed later */
-  std::uint32_t cdata[BCRYPT_BLOCKS];
-  std::uint8_t ciphertext[4 * BCRYPT_BLOCKS+1] = "OrpheanBeholderScryDoubt";
+  // This can be precomputed later.
+  std::uint32_t cdata[kBcryptBlocks];
+  std::uint8_t ciphertext[4*kBcryptBlocks+1] = "OrpheanBeholderScryDoubt";
   std::uint8_t j = 0;
-  for (std::uint8_t i = 0; i < BCRYPT_BLOCKS; ++i)
-    cdata[i] = Blowfish_stream2word(ciphertext, 4 * BCRYPT_BLOCKS, &j);
+  for (std::uint8_t i = 0; i < kBcryptBlocks; ++i)
+    cdata[i] = Blowfish_stream2word(ciphertext, 4 * kBcryptBlocks, &j);
 
-  /* Now do the encryption */
+  // Now do the encryption.
   for (int k = 0; k < 64; ++k)
-    blf_enc(&state, cdata, BCRYPT_BLOCKS / 2);
+    blf_enc(&state, cdata, kBcryptBlocks / 2);
 
-  for (std::uint8_t i = 0; i < BCRYPT_BLOCKS; i++) {
-    ciphertext[4 * i + 3] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 2] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 1] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 0] = cdata[i] & 0xff;
+  for (std::uint8_t i = 0; i < kBcryptBlocks; ++i) {
+    const auto chr = cdata[i];
+    const auto k = i * 4;
+    ciphertext[k+3] = chr & 0xff;
+    ciphertext[k+2] = (chr >> 8) & 0xff;
+    ciphertext[k+1] = (chr >> 16) & 0xff;
+    ciphertext[k+0] = (chr >> 24) & 0xff;
   }
 
   PwdHash pwd_hash;
   std::copy_n(ciphertext, pwd_hash.size(), pwd_hash.data());
 
   // Clear memory.
-  memset(&state, 0, sizeof(state));
-  memset(ciphertext, 0, sizeof(ciphertext));
-  memset(cdata, 0, sizeof(cdata));
+  std::fill_n(reinterpret_cast<char*>(&state), sizeof(state), 0);
+  std::fill_n(ciphertext, 4*kBcryptBlocks+1, 0);
+  std::fill_n(cdata, kBcryptBlocks, 0);
 
   return pwd_hash;
 }
@@ -127,7 +130,6 @@ CreateRandGenerator() {
   std::mt19937 generator(rd());
   return std::bind(std::uniform_int_distribution<char>(), generator);
 }
-
 } // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -173,5 +175,4 @@ PwdHasher::IsSamePwd(std::string_view pwd, const BcryptArr& str) const noexcept
 
   return params->pwd_hash == GenHash(pwd, params->salt, params->rounds);
 }
-
 } // namespace bcrypt

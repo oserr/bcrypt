@@ -37,10 +37,6 @@
 
 #include "bcrypt_impl.h"
 
-#ifdef _WIN32
-#define snprintf _snprintf
-#endif
-
 namespace bcrypt {
 
 /* This implementation is adaptable to current computing power.
@@ -50,8 +46,6 @@ namespace bcrypt {
 
 static void encode_base64(u_int8_t *, u_int8_t *, u_int16_t);
 static void decode_base64(u_int8_t *, u_int16_t, u_int8_t *);
-
-const static char* error = ":";
 
 const static u_int8_t Base64Code[] =
 "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -133,160 +127,6 @@ encode_base64(u_int8_t *buffer, u_int8_t *data, u_int16_t len)
     *bp++ = Base64Code[c2 & 0x3f];
   }
   *bp = '\0';
-}
-
-void
-encode_salt(char *salt, u_int8_t *csalt, char minor, u_int16_t clen, u_int8_t logr)
-{
-  salt[0] = '$';
-  salt[1] = BCRYPT_VERSION;
-  salt[2] = minor;
-  salt[3] = '$';
-
-  // Max rounds are 31
-  snprintf(salt + 4, 4, "%2.2u$", logr & 0x001F);
-
-  encode_base64((u_int8_t *) salt + 7, csalt, clen);
-}
-
-
-// Generates a salt for this version of crypt. Since versions may change.
-// Keeping this here seems sensible. From:
-// http://mail-index.netbsd.org/tech-crypto/2002/05/24/msg000204.html.
-void
-bcrypt_gensalt(char minor, u_int8_t log_rounds, u_int8_t *seed, char *gsalt)
-{
-  if (log_rounds < 4) log_rounds = 4;
-  else if (log_rounds > 31) log_rounds = 31;
-
-  encode_salt(gsalt, seed, minor, BCRYPT_MAXSALT, log_rounds);
-}
-
-// We handle $Vers$log2(NumRounds)$salt+passwd$
-// i.e. $2$04$iwouldntknowwhattosayetKdJ6iFtacBqJdKe6aW7ou
-void
-bcrypt(const char *key, size_t key_len, const char *salt, char *encrypted)
-{
-  blf_ctx state;
-  u_int32_t i, k;
-  u_int16_t j;
-  u_int8_t ciphertext[4 * BCRYPT_BLOCKS+1] = "OrpheanBeholderScryDoubt";
-  u_int8_t csalt[BCRYPT_MAXSALT];
-  u_int32_t cdata[BCRYPT_BLOCKS];
-
-  /* Discard "$" identifier */
-  salt++;
-
-  if (*salt > BCRYPT_VERSION) {
-    /* How do I handle errors ? Return ':' */
-    strcpy(encrypted, error);
-    return;
-  }
-
-  /* Check for minor versions */
-  u_int8_t minor = 0;
-  if (salt[1] != '$') {
-    switch (salt[1]) {
-    case 'a': /* 'ab' should not yield the same as 'abab' */
-    case 'b': /* cap input length at 72 bytes */
-      minor = salt[1];
-      salt++;
-      break;
-    default:
-      strcpy(encrypted, error);
-      return;
-    }
-  }
-
-  /* Discard version + "$" identifier */
-  salt += 2;
-
-  if (salt[2] != '$') {
-    /* Out of sync with passwd entry */
-    strcpy(encrypted, error);
-    return;
-  }
-
-  /* Computer power doesn't increase linear, 2^x should be fine */
-  int n = atoi(salt);
-  if (n > 31 || n < 0) {
-    strcpy(encrypted, error);
-    return;
-  }
-  u_int32_t rounds = 0;
-  u_int8_t logr = (u_int8_t)n;
-  if ((rounds = (u_int32_t) 1 << logr) < BCRYPT_MINROUNDS) {
-    strcpy(encrypted, error);
-    return;
-  }
-
-  /* Discard num rounds + "$" identifier */
-  salt += 3;
-
-  if (strlen(salt) * 3 / 4 < BCRYPT_MAXSALT) {
-    strcpy(encrypted, error);
-    return;
-  }
-
-  /* We dont want the base64 salt but the raw data */
-  decode_base64(csalt, BCRYPT_MAXSALT, (u_int8_t *) salt);
-  u_int8_t salt_len = BCRYPT_MAXSALT;
-  if (minor <= 'a')
-    key_len = (u_int8_t)(key_len + (minor >= 'a' ? 1 : 0));
-  else
-  {
-    /* cap key_len at the actual maximum supported
-    * length here to avoid integer wraparound */
-    if (key_len > 72)
-      key_len = 72;
-    key_len++; /* include the NUL */
-  }
-
-
-  /* Setting up S-Boxes and Subkeys */
-  Blowfish_initstate(&state);
-  Blowfish_expandstate(&state, csalt, salt_len, (u_int8_t *) key, key_len);
-  for (u_int32_t k = 0; k < rounds; k++) {
-    Blowfish_expand0state(&state, (u_int8_t *) key, key_len);
-    Blowfish_expand0state(&state, csalt, salt_len);
-  }
-
-  /* This can be precomputed later */
-  u_int16_t j = 0;
-  for (u_int32_t i = 0; i < BCRYPT_BLOCKS; i++)
-    cdata[i] = Blowfish_stream2word(ciphertext, 4 * BCRYPT_BLOCKS, &j);
-
-  /* Now do the encryption */
-  for (u_int32_t k = 0; k < 64; k++)
-    blf_enc(&state, cdata, BCRYPT_BLOCKS / 2);
-
-  for (u_int32_t i = 0; i < BCRYPT_BLOCKS; i++) {
-    ciphertext[4 * i + 3] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 2] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 1] = cdata[i] & 0xff;
-    cdata[i] = cdata[i] >> 8;
-    ciphertext[4 * i + 0] = cdata[i] & 0xff;
-  }
-
-  u_int32_t i = 0;
-  encrypted[i++] = '$';
-  encrypted[i++] = BCRYPT_VERSION;
-  if (minor)
-    encrypted[i++] = minor;
-  encrypted[i++] = '$';
-
-  snprintf(encrypted + i, 4, "%2.2u$", logr & 0x001F);
-
-  encode_base64((u_int8_t *) encrypted + i + 3, csalt, BCRYPT_MAXSALT);
-  encode_base64(
-      (u_int8_t *) encrypted + strlen(encrypted), ciphertext,
-      4 * BCRYPT_BLOCKS - 1);
-  memset(&state, 0, sizeof(state));
-  memset(ciphertext, 0, sizeof(ciphertext));
-  memset(csalt, 0, sizeof(csalt));
-  memset(cdata, 0, sizeof(cdata));
 }
 
 } // namespace bcrypt
