@@ -1,5 +1,3 @@
-/*	$OpenBSD: bcrypt.c,v 1.31 2014/03/22 23:02:03 tedu Exp $	*/
-
 /*
  * Copyright (c) 1997 Niels Provos <provos@umich.edu>
  *
@@ -15,118 +13,109 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "bcrypt_b64.h"
 
-/* This password hashing algorithm was designed by David Mazieres
- * <dm@lcs.mit.edu> and works as follows:
- *
- * 1. state := InitState ()
- * 2. state := ExpandKey (state, salt, password)
- * 3. REPEAT rounds:
- *    	state := ExpandKey (state, 0, password)
- *    state := ExpandKey (state, 0, salt)
- * 4. ctext := "OrpheanBeholderScryDoubt"
- * 5. REPEAT 64:
- *    	ctext := Encrypt_ECB (state, ctext);
- * 6. RETURN Concatenate (salt, ctext);
- *
- */
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <string.h>
-
-#include "bcrypt_impl.h"
+#include <cstdint>
 
 namespace bcrypt {
+// Base 64 code used by BCrypt.
+constexpr std::uint8_t kBase64Code[] =
+  "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-/* This implementation is adaptable to current computing power.
- * You can have up to 2^31 rounds which should be enough for some
- * time to come.
- */
-
-static void encode_base64(u_int8_t *, u_int8_t *, u_int16_t);
-static void decode_base64(u_int8_t *, u_int16_t, u_int8_t *);
-
-const static u_int8_t Base64Code[] =
-"./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-constexpr u_int8_t index_64[128] = {
-  255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-  255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-  255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-  255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-  255, 255, 255, 255, 255, 255, 0, 1, 54, 55,
-  56, 57, 58, 59, 60, 61, 62, 63, 255, 255,
-  255, 255, 255, 255, 255, 2, 3, 4, 5, 6,
-  7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-  255, 255, 255, 255, 255, 255, 28, 29, 30,
-  31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-  41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
-  51, 52, 53, 255, 255, 255, 255, 255
+// Used to convert base 64 to binary.
+constexpr std::uint8_t kIndex64[128] = {
+  255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+  255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+  255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+  255, 0, 1, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 255, 255, 255, 255, 255,
+  255, 255, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  21, 22, 23, 24, 25, 26, 27, 255, 255, 255, 255, 255, 255, 28, 29, 30, 31, 32,
+  33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+  52, 53, 255, 255, 255, 255, 255
 };
 
-inline
-constexpr uint8_t ToChar64(u_int8_t c) { return c > 127 ? 255 : index_64[c]; }
+inline constexpr std::uint8_t
+ToChar64(std::uint8_t c) { return kIndex64[c & 0x3f]; }
 
-static void
-decode_base64(u_int8_t *buffer, u_int16_t len, u_int8_t *data)
+void
+ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
 {
-  u_int8_t *bp = buffer;
-  u_int8_t *p = data;
+  auto* last = from + num_bytes;
+  // Process three bytes at a time to simplify logic and reduce number of
+  // branches in tight loop. We handle remaining bytes below.
+  for (; last - from >= 3; from += 3, to += 4) {
+    const auto f1 = from[0];
+    const auto f2 = from[1];
+    const auto f3 = from[2];
 
-  while (bp < buffer + len) {
-    u_int8_t c1 = ToChar64(*p);
-    u_int8_t c2 = ToChar64(*(p + 1));
+    const auto t1 = f1 >> 2;
+    const auto t2 = ((f1 & 0x03) << 4) | ((f2 >> 4) & 0x0f);
+    const auto t3 = ((f2 & 0x0f) << 2) | ((f3 >> 6) & 0x03); 
+    const auto t4 = f3 & 0x3f;
 
-    /* Invalid data */
-    if (c1 == 255 || c2 == 255) break;
-
-    *bp++ = (c1 << 2) | ((c2 & 0x30) >> 4);
-    if (bp >= buffer + len) break;
-
-    u_int8_t c3 = ToChar64(*(p + 2));
-    if (c3 == 255) break;
-
-    *bp++ = ((c2 & 0x0f) << 4) | ((c3 & 0x3c) >> 2);
-    if (bp >= buffer + len) break;
-
-    u_int8_t c4 = ToChar64(*(p + 3));
-    if (c4 == 255) break;
-
-    *bp++ = ((c3 & 0x03) << 6) | c4;
-
-    p += 4;
+    to[0] = kBase64Code[t1];
+    to[1] = kBase64Code[t2];
+    to[2] = kBase64Code[t3];
+    to[3] = kBase64Code[t4];
   }
+
+  const auto diff = last - from;
+  if (diff == 1) {
+    const auto f1 = from[0];
+    const auto t1 = f1 >> 2;
+    const auto t2 = ((f1 & 0x03) << 4);
+    to[0] = kBase64Code[t1];
+    to[1] = kBase64Code[t2];
+    to += 2;
+  } else if (diff == 2) {
+    const auto f1 = from[0];
+    const auto f2 = from[1];
+    const auto t1 = f1 >> 2;
+    const auto t2 = ((f1 & 0x03) << 4) | ((f2 >> 4) & 0x0f);
+    const auto t3 = ((f2 & 0x0f) << 2);
+    to[0] = kBase64Code[t1];
+    to[1] = kBase64Code[t2];
+    to[2] = kBase64Code[t3];
+    to += 3;
+  }
+
+  // Append nullbyte.
+  *to = 0;
 }
 
-static void
-encode_base64(u_int8_t *buffer, u_int8_t *data, u_int16_t len)
+void
+FromBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
 {
-  u_int8_t *bp = buffer;
-  u_int8_t *p = data;
-  while (p < data + len) {
-    u_int8_t c1 = *p++;
-    *bp++ = Base64Code[(c1 >> 2)];
-    c1 = (c1 & 0x03) << 4;
-    if (p >= data + len) {
-      *bp++ = Base64Code[c1];
-      break;
-    }
-    u_int8_t c2 = *p++;
-    c1 |= (c2 >> 4) & 0x0f;
-    *bp++ = Base64Code[c1];
-    c1 = (c2 & 0x0f) << 2;
-    if (p >= data + len) {
-      *bp++ = Base64Code[c1];
-      break;
-    }
-    c2 = *p++;
-    c1 |= (c2 >> 6) & 0x03;
-    *bp++ = Base64Code[c1];
-    *bp++ = Base64Code[c2 & 0x3f];
-  }
-  *bp = '\0';
-}
+  auto* last = from + num_bytes;
+  // Process 4 bytes at a time to simplify logic and reduce number of
+  // branches in tight loop. We handle remaining bytes below.
+  for (; last - from >= 4; from += 4, to += 3) {
+    const auto f1 = ToChar64(from[0]);
+    const auto f2 = ToChar64(from[1]);
+    const auto f3 = ToChar64(from[2]);
+    const auto f4 = ToChar64(from[3]);
 
+    to[0] = (f1 << 2) | ((f2 & 0x30) >> 4);
+    to[1] = ((f2 & 0x0f) << 4) | ((f3 & 0x3c) >> 2);
+    to[2] = ((f3 & 0x03) << 6) | f4;
+  }
+
+  const auto diff = last - from;
+  if (diff == 2) {
+    const auto f1 = ToChar64(from[0]);
+    const auto f2 = ToChar64(from[1]);
+    *to++ = (f1 << 2) | ((f2 & 0x30) >> 4);
+  } else if (diff == 3) {
+    const auto f1 = ToChar64(from[0]);
+    const auto f2 = ToChar64(from[1]);
+    const auto f3 = ToChar64(from[2]);
+    to[0] = (f1 << 2) | ((f2 & 0x30) >> 4);
+    to[1] = ((f2 & 0x0f) << 4) | ((f3 & 0x3c) >> 2);
+    to += 2;
+  }
+  // 1 is not an option.
+  
+  // Append nullbyte.
+  *to = 0;
+}
 } // namespace bcrypt
