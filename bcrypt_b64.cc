@@ -50,7 +50,7 @@ ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
 
     const auto t1 = f1 >> 2;
     const auto t2 = ((f1 & 0x03) << 4) | ((f2 >> 4) & 0x0f);
-    const auto t3 = ((f2 & 0x0f) << 2) | ((f3 >> 6) & 0x03); 
+    const auto t3 = ((f2 & 0x0f) << 2) | ((f3 >> 6) & 0x03);
     const auto t4 = f3 & 0x3f;
 
     to[0] = kBase64Code[t1];
@@ -114,7 +114,7 @@ FromBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
     to += 2;
   }
   // 1 is not an option.
-  
+
   // Append nullbyte.
   *to = 0;
 }

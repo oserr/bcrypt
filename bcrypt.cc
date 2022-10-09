@@ -10,9 +10,10 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "bcrypt_b64.h"
+
 namespace bcrypt {
 namespace {
-
 // Ciphertext blocks.
 constexpr std::uint8_t kBcryptBlocks = 6;
 
