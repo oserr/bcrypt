@@ -86,12 +86,12 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
     pwd.remove_suffix(pwd.size()-kMaxPwdSize);
 
   // Setting up S-Boxes and Subkeys
-  blf_ctx state;
-  Blowfish_initstate(&state);
-  Blowfish_expandstate(&state, salt.data(), salt.size(), pwd.data(), pwd.size());
+  Context ctx;
+  Blowfish_initstate(&ctx);
+  Blowfish_expandstate(&ctx, salt.data(), salt.size(), pwd.data(), pwd.size());
   for (std::uint32_t k = 0; k < rounds; ++k) {
-    Blowfish_expand0state(&state, pwd.data(), pwd.size());
-    Blowfish_expand0state(&state, salt.data(), salt.size());
+    Blowfish_expand0state(&ctx, pwd.data(), pwd.size());
+    Blowfish_expand0state(&ctx, salt.data(), salt.size());
   }
 
   // This can be precomputed later.
@@ -103,7 +103,7 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
 
   // Now do the encryption.
   for (int k = 0; k < 64; ++k)
-    blf_enc(&state, cdata, kBcryptBlocks / 2);
+    blf_enc(&ctx, cdata, kBcryptBlocks / 2);
 
   for (std::uint8_t i = 0; i < kBcryptBlocks; ++i) {
     const auto chr = cdata[i];

@@ -32,10 +32,9 @@
  */
 #pragma once
 
-#include <sys/types.h>
+#include <cstdint>
 
 namespace bcrypt {
-
 /* Schneier specifies a maximum key length of 56 bytes.
  * This ensures that every key bit affects every cipher
  * bit.  However, the subkeys can hold up to 72 bytes.
@@ -44,48 +43,35 @@ namespace bcrypt {
  */
 
 // Number of Subkeys
-constexpr u_int8_t BLF_N = 16;
+constexpr std::uint8_t kNumSubkeys = 16;
 // 448 bits
-constexpr u_int8_t BLF_MAXKEYLEN = (BLF_N-2)*4;
-// 576 bits
-constexpr u_int8_t BLF_MAXUTILIZED = (BLF_N+2)*4;
-// max length, not counting NUL
-constexpr u_int8_t _PASSWORD_LEN = 128;
-// max length
-constexpr u_int8_t _SALT_LEN = 32;
+constexpr std::uint8_t kMaxKeyLen = (kNumSubkeys-2)*4;
 
 /* Blowfish context */
-typedef struct BlowfishContext {
-	u_int32_t S[4][256];	/* S-Boxes */
-	u_int32_t P[BLF_N + 2];	/* Subkeys */
-} blf_ctx;
+struct Context {
+  std::uint32_t S[4][256]; /* S-Boxes */
+  std::uint32_t P[kNumSubkeys + 2]; /* Subkeys */
+};
 
 /* Raw access to customized Blowfish
- *	blf_key is just:
- *	Blowfish_initstate( state )
- *	Blowfish_expand0state( state, key, keylen )
+ *  blf_key is just:
+ *  Blowfish_initstate( state )
+ *  Blowfish_expand0state( state, key, keylen )
  */
 
-void Blowfish_encipher(blf_ctx *, u_int32_t *, u_int32_t *);
-void Blowfish_decipher(blf_ctx *, u_int32_t *, u_int32_t *);
-void Blowfish_initstate(blf_ctx *);
-void Blowfish_expand0state(blf_ctx *, const u_int8_t *, u_int16_t);
-void Blowfish_expandstate
-(blf_ctx *, const u_int8_t *, u_int16_t, const u_int8_t *, u_int16_t);
+void Blowfish_encipher(Context* ctx, std::uint32_t*, std::uint32_t *);
+void Blowfish_initstate(Context* ctx);
+void Blowfish_expand0state(Context* ctx, const std::uint8_t *, std:uint16_t);
+void Blowfish_expandstate(
+    Context* context,
+    const std::uint8_t *,
+    std::uint16_t,
+    const std::uint8_t *,
+    std::uint16_t);
 
 /* Standard Blowfish */
-
-void blf_key(blf_ctx *, const u_int8_t *, u_int16_t);
-void blf_enc(blf_ctx *, u_int32_t *, u_int16_t);
-void blf_dec(blf_ctx *, u_int32_t *, u_int16_t);
-
-void blf_ecb_encrypt(blf_ctx *, u_int8_t *, u_int32_t);
-void blf_ecb_decrypt(blf_ctx *, u_int8_t *, u_int32_t);
-
-void blf_cbc_encrypt(blf_ctx *, u_int8_t *, u_int8_t *, u_int32_t);
-void blf_cbc_decrypt(blf_ctx *, u_int8_t *, u_int8_t *, u_int32_t);
+void blf_enc(Context* ctx, std::uint32_t*, std::uint16_t);
 
 /* Converts u_int8_t to u_int32_t */
-u_int32_t Blowfish_stream2word(const u_int8_t *, u_int16_t , u_int16_t *);
-
+u_int32_t Blowfish_stream2word(const std::uint8_t*, std::uint16_t , std::uint16_t *);
 } // namespace bcrypt
