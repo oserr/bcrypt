@@ -61,7 +61,7 @@ struct Context {
 
 void Blowfish_encipher(Context* ctx, std::uint32_t*, std::uint32_t *);
 void Blowfish_initstate(Context* ctx);
-void Blowfish_expand0state(Context* ctx, const std::uint8_t *, std:uint16_t);
+void Blowfish_expand0state(Context* ctx, const std::uint8_t *, std::uint16_t);
 void Blowfish_expandstate(
     Context* context,
     const std::uint8_t *,
@@ -73,5 +73,5 @@ void Blowfish_expandstate(
 void blf_enc(Context* ctx, std::uint32_t*, std::uint16_t);
 
 /* Converts u_int8_t to u_int32_t */
-u_int32_t Blowfish_stream2word(const std::uint8_t*, std::uint16_t , std::uint16_t *);
+std::uint32_t Blowfish_stream2word(const std::uint8_t*, std::uint16_t , std::uint16_t *);
 } // namespace bcrypt

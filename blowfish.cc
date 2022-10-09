@@ -54,7 +54,7 @@ namespace bcrypt {
 void
 Blowfish_encipher(Context *c, std::uint32_t *xl, std::uint32_t *xr)
 {
-  std::uint32_t Xl = *xL;
+  std::uint32_t Xl = *xl;
   std::uint32_t Xr = *xr;
   std::uint32_t *s = c->S[0];
   std::uint32_t *p = c->P;

@@ -3,14 +3,17 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <optional>
 #include <random>
 #include <stdexcept>
 #include <string_view>
 
+#include <fmt/core.h>
+#include <fmt/format.h>
+
 #include "bcrypt_b64.h"
+#include "blowfish.h"
 
 namespace bcrypt {
 namespace {
@@ -33,30 +36,34 @@ struct BcryptParams {
   PwdHash pwd_hash;
   Salt salt;
   std::uint32_t rounds = 0;
-}
+};
 
 // Returns the parameters if they are decoded correctly.
 // $--$--$-----------------------------------------------------
 // 012345678901234567890123456789012345678901234567890123456789
 //        |                     |
 //        Salt begins here      Password hash begins here
-std::optional<BCryptParams>
-DecodeBcrypt(const BcrytpArr& arr) {
+std::optional<BcryptParams>
+DecodeBcrypt(const BcryptArr& arr) {
   if (arr[0] != '$') return std::nullopt;
   if (arr[1] != '2') return std::nullopt;
-  if (arr[2] != 'b') return std::nullptr;
-  if (arr[3] != '$') return std::nullptr;
+  if (arr[2] != 'b') return std::nullopt;
+  if (arr[3] != '$') return std::nullopt;
 
-  BCryptParams params;
+  BcryptParams params;
   auto* first = &arr[4];
-  const auto result = std::from_chars(first, first+2, &params.rounds);
+  const auto result = std::from_chars(first, first+2, params.rounds);
   // This implies from_chars did not find a match.
   if (first == result.ptr) return std::nullopt;
 
   if (params.rounds < 4 || params.rounds > 31) return std::nullopt;
 
-  FromBase64(arr[7], kEncodedSaltSize, params.salt.data());
-  FromBase64(arr[29], kEncodedHashSize, params.pwd_hash.data());
+  FromBase64(reinterpret_cast<const std::uint8_t*>(&arr[7]),
+             kEncodedSaltSize,
+             reinterpret_cast<std::uint8_t*>(params.salt.data()));
+  FromBase64(reinterpret_cast<const std::uint8_t*>(&arr[29]),
+             kEncodedHashSize,
+             reinterpret_cast<std::uint8_t*>(params.pwd_hash.data()));
 
   return params;
 }
@@ -65,14 +72,18 @@ BcryptArr
 EncodeBcrypt(const PwdHash& hsh, const Salt& salt, std::uint32_t rounds)
 {
   char b64_hash[kEncodedHashSize+1];
-  ToBase64(hsh.data(), hsh.size(), b64_hash);
+  ToBase64(reinterpret_cast<const std::uint8_t*>(hsh.data()),
+           hsh.size(),
+           reinterpret_cast<std::uint8_t*>(b64_hash));
 
   char b64_salt[kEncodedSaltSize+1];
-  ToBase64(salt.data(), salt.size(), b64_salt);
+  ToBase64(reinterpret_cast<const std::uint8_t*>(salt.data()),
+           salt.size(),
+           reinterpret_cast<std::uint8_t*>(b64_salt));
 
   BcryptArr bcrypt_arr;
-  std::format_to_n(bcrypt_arr.begin(), bcrypt_arr.size(),
-      "$2b${:>0}${}{}", rounds, b64_salt, b64_hash);
+  fmt::format_to_n(bcrypt_arr.begin(), bcrypt_arr.size(),
+      FMT_STRING("$2b${:>0}${}{}"), rounds, b64_salt, b64_hash);
 
   return bcrypt_arr;
 }
@@ -88,16 +99,21 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
   // Setting up S-Boxes and Subkeys
   Context ctx;
   Blowfish_initstate(&ctx);
-  Blowfish_expandstate(&ctx, salt.data(), salt.size(), pwd.data(), pwd.size());
+  Blowfish_expandstate(
+      &ctx, reinterpret_cast<const std::uint8_t*>(salt.data()),
+      salt.size(), reinterpret_cast<const std::uint8_t*>(pwd.data()),
+      pwd.size());
   for (std::uint32_t k = 0; k < rounds; ++k) {
-    Blowfish_expand0state(&ctx, pwd.data(), pwd.size());
-    Blowfish_expand0state(&ctx, salt.data(), salt.size());
+    Blowfish_expand0state(
+        &ctx, reinterpret_cast<const std::uint8_t*>(pwd.data()), pwd.size());
+    Blowfish_expand0state(
+        &ctx, reinterpret_cast<const std::uint8_t*>(salt.data()), salt.size());
   }
 
   // This can be precomputed later.
   std::uint32_t cdata[kBcryptBlocks];
   std::uint8_t ciphertext[4*kBcryptBlocks+1] = "OrpheanBeholderScryDoubt";
-  std::uint8_t j = 0;
+  std::uint16_t j = 0;
   for (std::uint8_t i = 0; i < kBcryptBlocks; ++i)
     cdata[i] = Blowfish_stream2word(ciphertext, 4 * kBcryptBlocks, &j);
 
@@ -118,7 +134,7 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
   std::copy_n(ciphertext, pwd_hash.size(), pwd_hash.data());
 
   // Clear memory.
-  std::fill_n(reinterpret_cast<char*>(&state), sizeof(state), 0);
+  std::fill_n(reinterpret_cast<char*>(&ctx), sizeof(ctx), 0);
   std::fill_n(ciphertext, 4*kBcryptBlocks+1, 0);
   std::fill_n(cdata, kBcryptBlocks, 0);
 
@@ -137,7 +153,7 @@ CreateRandGenerator() {
 // PwdHasher
 ///////////////////////////////////////////////////////////////////////////////
 
-PwdHasher::PwdHasher()
+PwdHasher::PwdHasher() noexcept
   : random_char_fn_(CreateRandGenerator()) {}
 
 PwdHasher::PwdHasher(std::function<char()> random_char_fn)
@@ -148,7 +164,7 @@ PwdHasher::PwdHasher(std::function<char()> random_char_fn)
 }
 
 Salt
-PwdHasher::GenSalt() noexcept {
+PwdHasher::GenSalt() const noexcept {
   Salt salt;
   std::generate(salt.begin(), salt.end(), random_char_fn_);
   return salt;
@@ -169,7 +185,7 @@ PwdHasher::Generate(std::string_view pwd, std::uint32_t rounds) const
 bool
 PwdHasher::IsSamePwd(std::string_view pwd, const BcryptArr& str) const noexcept
 {
-  if (pwd.empty()) false;
+  if (pwd.empty()) return false;
 
   const auto params = DecodeBcrypt(str);
   if (not params) return false;

@@ -26,7 +26,7 @@ namespace bcrypt {
  *  including a byte for the null byte, can be computed as:
  *  num_bytes / 3 * 4 + (num_bytes % 3) + 2.
  */
-void ToBase64(const std::uint8_t* from, int num_bytes, std::u_int8_t* to);
+void ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to);
 
 /**
  * Converts BCrypt's base 64 encoding to binary data.

@@ -39,7 +39,7 @@ public:
 
   // Returns true if the password is the hashed password.
   bool
-  IsSamePwd(std::string_view pwd, const BcryptStr& str) const noexcept;
+  IsSamePwd(std::string_view pwd, const BcryptArr& arr) const noexcept;
 
 private:
   // Generates a salt with 16 random bytes.
@@ -47,7 +47,7 @@ private:
   GenSalt() const noexcept;
 
   // Random char generator. Used to generate salts.
-  std::function<char()> randon_char_fn_;
+  std::function<char()> random_char_fn_;
 };
 
 } // namespace bcrypt
