@@ -8,6 +8,7 @@
 #include <random>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -140,21 +141,22 @@ GenHash(std::string_view pwd, const Salt& salt, std::uint32_t rounds) noexcept
 
   return pwd_hash;
 }
-
-std::function<char()>
-CreateRandGenerator() {
-  std::random_device rd;
-  std::mt19937 generator(rd());
-  return std::bind(std::uniform_int_distribution<char>(), generator);
-}
 } // namespace
+
+// Creates a random generator.
+std::function<char()>
+CreateRandCharGenerator(std::random_device::result_type seed) {
+  std::mt19937 generator(seed);
+  return std::bind_front(std::uniform_int_distribution<char>(),
+                         std::move(generator));
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // PwdHasher
 ///////////////////////////////////////////////////////////////////////////////
 
 PwdHasher::PwdHasher() noexcept
-  : random_char_fn_(CreateRandGenerator()) {}
+  : random_char_fn_(CreateRandCharGenerator()) {}
 
 PwdHasher::PwdHasher(std::function<char()> random_char_fn)
   : random_char_fn_(random_char_fn)
@@ -166,7 +168,7 @@ PwdHasher::PwdHasher(std::function<char()> random_char_fn)
 Salt
 PwdHasher::GenSalt() const noexcept {
   Salt salt;
-  std::generate(salt.begin(), salt.end(), random_char_fn_);
+  for (auto& c : salt) c = random_char_fn_();
   return salt;
 }
 
@@ -183,13 +185,14 @@ PwdHasher::Generate(std::string_view pwd, std::uint32_t rounds) const
 }
 
 bool
-PwdHasher::IsSamePwd(std::string_view pwd, const BcryptArr& str) const noexcept
+PwdHasher::IsSamePwd(std::string_view pwd, const BcryptArr& arr) const noexcept
 {
   if (pwd.empty()) return false;
 
-  const auto params = DecodeBcrypt(str);
+  const auto params = DecodeBcrypt(arr);
   if (not params) return false;
 
-  return params->pwd_hash == GenHash(pwd, params->salt, params->rounds);
+  const auto pwd_hash = GenHash(pwd, params->salt, params->rounds);
+  return params->pwd_hash == pwd_hash;
 }
 } // namespace bcrypt

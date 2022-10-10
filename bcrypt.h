@@ -1,9 +1,15 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <random>
 #include <string_view>
 
 namespace bcrypt {
+
+// Creates a random generator.
+std::function<char()>
+CreateRandCharGenerator(
+    std::random_device::result_type seed = std::random_device()());
 
 // Format is $2b$Cost$SaltHash and contains a total of 60 bytes.
 // The dollar signs are part of the format:
