@@ -18,6 +18,7 @@
 #include <cstdint>
 
 namespace bcrypt {
+namespace {
 // Base 64 code used by BCrypt.
 constexpr std::uint8_t kBase64Code[] =
   "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -35,22 +36,40 @@ constexpr std::uint8_t kIndex64[128] = {
 };
 
 inline constexpr std::uint8_t
-ToChar64(std::uint8_t c) { return kIndex64[c & 0x3f]; }
+ToChar64(std::uint8_t c) { return kIndex64[c & 0x7f]; }
+} // namespace
 
+constexpr std::uint32_t
+ToSize(std::uint32_t num_bytes) noexcept
+{
+  auto q = num_bytes / 3;
+  auto r = num_bytes % 3;
+  return (q * 4) + (r ? r + 1 : 0);
+}
+
+constexpr std::uint32_t
+FromSize(std::uint32_t num_bytes) noexcept {
+  auto q = num_bytes / 4;
+  auto r = num_bytes % 4;
+  return (q * 3) + (r ? r - 1 : 0);
+}
+
+// --------|--------|--------
+// ------|------|------|------
 void
-ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
+ToBase64(const std::uint8_t* from, std::uint32_t num_bytes, std::uint8_t* to)
 {
   auto* last = from + num_bytes;
   // Process three bytes at a time to simplify logic and reduce number of
   // branches in tight loop. We handle remaining bytes below.
-  for (; last - from >= 3; from += 3, to += 4) {
+  for (; from <= last - 3; from += 3, to += 4) {
     const auto f1 = from[0];
     const auto f2 = from[1];
     const auto f3 = from[2];
 
     const auto t1 = f1 >> 2;
-    const auto t2 = ((f1 & 0x03) << 4) | ((f2 >> 4) & 0x0f);
-    const auto t3 = ((f2 & 0x0f) << 2) | ((f3 >> 6) & 0x03);
+    const auto t2 = ((f1 & 0x03) << 4) | (f2 >> 4);
+    const auto t3 = ((f2 & 0x0f) << 2) | (f3 >> 6);
     const auto t4 = f3 & 0x3f;
 
     to[0] = kBase64Code[t1];
@@ -63,7 +82,7 @@ ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
   if (diff == 1) {
     const auto f1 = from[0];
     const auto t1 = f1 >> 2;
-    const auto t2 = ((f1 & 0x03) << 4);
+    const auto t2 = (f1 & 0x03) << 4;
     to[0] = kBase64Code[t1];
     to[1] = kBase64Code[t2];
     to += 2;
@@ -71,51 +90,48 @@ ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
     const auto f1 = from[0];
     const auto f2 = from[1];
     const auto t1 = f1 >> 2;
-    const auto t2 = ((f1 & 0x03) << 4) | ((f2 >> 4) & 0x0f);
-    const auto t3 = ((f2 & 0x0f) << 2);
+    const auto t2 = ((f1 & 0x03) << 4) | (f2 >> 4);
+    const auto t3 = (f2 & 0x0f) << 2;
     to[0] = kBase64Code[t1];
     to[1] = kBase64Code[t2];
     to[2] = kBase64Code[t3];
     to += 3;
   }
-
-  // Append nullbyte.
-  *to = 0;
 }
 
+// ------|------|------|------
+// --------|--------|--------
+// t1 = f1(6).f2(2)
+// t2 = f2(4).f3(4)
+// t2 = f3(2).f4(6)
 void
-FromBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to)
+FromBase64(const std::uint8_t* from, std::uint32_t num_bytes, std::uint8_t* to)
 {
   auto* last = from + num_bytes;
   // Process 4 bytes at a time to simplify logic and reduce number of
   // branches in tight loop. We handle remaining bytes below.
-  for (; last - from >= 4; from += 4, to += 3) {
+  for (; from <= last - 4; from += 4, to += 3) {
     const auto f1 = ToChar64(from[0]);
     const auto f2 = ToChar64(from[1]);
     const auto f3 = ToChar64(from[2]);
     const auto f4 = ToChar64(from[3]);
-
-    to[0] = (f1 << 2) | ((f2 & 0x30) >> 4);
-    to[1] = ((f2 & 0x0f) << 4) | ((f3 & 0x3c) >> 2);
-    to[2] = ((f3 & 0x03) << 6) | f4;
+    to[0] = (f1 << 2) | (f2 >> 4);
+    to[1] = (f2 << 4) | (f3 >> 2);
+    to[2] = (f3 << 6) | f4;
   }
 
   const auto diff = last - from;
   if (diff == 2) {
     const auto f1 = ToChar64(from[0]);
     const auto f2 = ToChar64(from[1]);
-    *to++ = (f1 << 2) | ((f2 & 0x30) >> 4);
+    *to++ = (f1 << 2) | ((f2 >> 4) & 0x03);
   } else if (diff == 3) {
     const auto f1 = ToChar64(from[0]);
     const auto f2 = ToChar64(from[1]);
     const auto f3 = ToChar64(from[2]);
-    to[0] = (f1 << 2) | ((f2 & 0x30) >> 4);
-    to[1] = ((f2 & 0x0f) << 4) | ((f3 & 0x3c) >> 2);
+    to[0] = (f1 << 2) | (f2 >> 4);
+    to[1] = (f2 << 4) | (f3 >> 2);
     to += 2;
   }
-  // 1 is not an option.
-
-  // Append nullbyte.
-  *to = 0;
 }
 } // namespace bcrypt

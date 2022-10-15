@@ -17,26 +17,40 @@
 
 namespace bcrypt {
 /**
+ * Returns the number of bytes needed to hold the base64 encoding of |num_bytes|
+ * of binary data from ToBase64. 
+ */
+constexpr std::uint32_t
+ToSize(std::uint32_t num_bytes) noexcept;
+
+/**
+ * Returns the number of bytes needed to hold the binary data of |num_bytes|
+ * of decoded base64 data from FromBase64.
+ */
+constexpr std::uint32_t
+FromSize(std::uint32_t num_bytes) noexcept;
+
+/**
  * Converts binary data to base 64 with using BCrypt's encoding.
  *
  * @param from The buffer containing the binary data.
  * @param num_bytes The number of bytes to convert from |from|.
  * @param to The buffer where the base 64 encoding is written to. It must be
- *  large enough to hold the encoding data plus a null byte. The size,
- *  including a byte for the null byte, can be computed as:
- *  num_bytes / 3 * 4 + (num_bytes % 3) + 2.
+ *  large enough to hold the encoding data. The size of buffer has to be at
+ *  least ToSize(num_bytes) bytes large. No nullbyte is appended.
  */
-void ToBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to);
+void
+ToBase64(const std::uint8_t* from, std::uint32_t num_bytes, std::uint8_t* to);
 
 /**
  * Converts BCrypt's base 64 encoding to binary data.
  *
  * @param from The buffer containing the base 64 encoded data.
  * @param num_bytes The total number of bytes in |from|.
- * @param to The buffer where the binary data is written to. It must be
- *  large enough to hold the decoded data plus a null byte. The size,
- *  including a byte for the null byte, can be computed as:
- *  num_bytes / 4 * 3 + (num_bytes % 4).
+ * @param to The buffer where the binary data is written to. It must be large
+ *  enough to hold the decoded data, at last FromSize(num_bytes) bytes. Null
+ *  bytes is not appended.
  */
-void FromBase64(const std::uint8_t* from, int num_bytes, std::uint8_t* to);
+void
+FromBase64(const std::uint8_t* from, std::uint32_t num_bytes, std::uint8_t* to);
 } // namespace bcrypt
