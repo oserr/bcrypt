@@ -19,8 +19,8 @@ message(STATUS "Building ${CMAKE_PROJECT_NAME} in ${build_type} mode")
 add_library(bcrypt STATIC
   bcrypt.cc
   bcrypt.h
-  bcrypt_b64.cc
-  bcrypt_b64.h
+  base64.cc
+  base64.h
   blowfish.cc
   blowfish.h)
 
@@ -45,3 +45,11 @@ add_executable(bcrypt_test bcrypt_test.cc)
 target_compile_features(bcrypt_test PRIVATE)
 target_link_libraries(bcrypt_test bcrypt gtest gmock gtest_main)
 gtest_discover_tests(bcrypt_test)
+
+add_executable(base64_test
+  base64_test.cc
+  base64.cc
+  base64.h)
+target_compile_features(base64_test PRIVATE)
+target_link_libraries(base64_test gtest gmock gtest_main)
+gtest_discover_tests(base64_test)
