@@ -1,6 +1,7 @@
 #include "base64.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -11,15 +12,15 @@ namespace bcrypt {
 namespace {
 
 TEST(ToSize, WorksCorrectly) {
-  std::uint32_t values[] = {0, 2, 3, 4, 6, 7, 8, 10, 11, 12};
-  for (std::uint32_t i = 0; i < sizeof(values); ++i) {
+  std::array<std::uint32_t, 10> values = {0, 2, 3, 4, 6, 7, 8, 10, 11, 12};
+  for (std::uint32_t i = 0; i < values.size(); ++i) {
     EXPECT_EQ(ToSize(i), values[i]);
   }
 }
 
 TEST(FromSize, WorksCorrectly) {
-  std::uint32_t values[] = {0, 0, 1, 2, 3, 3, 4, 5, 6, 6};
-  for (std::uint32_t i = 0; i < sizeof(values); ++i) {
+  std::array<std::uint32_t, 10> values = {0, 0, 1, 2, 3, 3, 4, 5, 6, 6};
+  for (std::uint32_t i = 0; i < values.size(); ++i) {
     EXPECT_EQ(FromSize(i), values[i]);
   }
 }
