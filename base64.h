@@ -18,16 +18,16 @@
 namespace bcrypt {
 /**
  * Returns the number of bytes needed to hold the base64 encoding of |num_bytes|
- * of binary data from ToBase64. 
+ * of binary data from ToBase64.
  */
-constexpr std::uint32_t
+std::uint32_t
 ToSize(std::uint32_t num_bytes) noexcept;
 
 /**
  * Returns the number of bytes needed to hold the binary data of |num_bytes|
  * of decoded base64 data from FromBase64.
  */
-constexpr std::uint32_t
+std::uint32_t
 FromSize(std::uint32_t num_bytes) noexcept;
 
 /**

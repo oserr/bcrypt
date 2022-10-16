@@ -13,7 +13,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include "bcrypt_b64.h"
+#include "base64.h"
 
 #include <cstdint>
 
@@ -39,7 +39,7 @@ inline constexpr std::uint8_t
 ToChar64(std::uint8_t c) { return kIndex64[c & 0x7f]; }
 } // namespace
 
-constexpr std::uint32_t
+std::uint32_t
 ToSize(std::uint32_t num_bytes) noexcept
 {
   auto q = num_bytes / 3;
@@ -47,7 +47,7 @@ ToSize(std::uint32_t num_bytes) noexcept
   return (q * 4) + (r ? r + 1 : 0);
 }
 
-constexpr std::uint32_t
+std::uint32_t
 FromSize(std::uint32_t num_bytes) noexcept {
   auto q = num_bytes / 4;
   auto r = num_bytes % 4;
